@@ -20,7 +20,7 @@ typedef struct fileMeta_struct {
 	int startBlock;			//number of startBlock block
 	int size;			//size
 	bool isDirectory;			//is directory (or file)
-	bool isNotFree;			//is free
+	bool isEmpty;			//is free
 } fileMeta;
 
 	// block[i] >= 0   next block's index, 
@@ -36,13 +36,13 @@ fileSystem fs; //global FS
 void initFS()
 {
 	int i = 0;
-	while (i < sizeof(fs.meta / fs.meta[0])) 
+	while (i < sizeof(fs.meta) / sizeof(fs.meta[0])) 
 	{
 		memset(fs.meta[i].name, 0, FILENAME_MAX_LENGTH);
 		fs.meta[i].isDirectory = false;
 		fs.meta[i].isEmpty = true;
-		fs.meta[i].blockStart = -1;
-		fs.meta[i].blockSize = 0;
+		fs.meta[i].startBlock = -1;
+		fs.meta[i].size = 0;
 		i++;
 	}
 	i = 0;
@@ -54,9 +54,9 @@ void initFS()
 
 void restoreFS()
 {
-  FILE *f = fopen(FUSE_SRC_FILE, "r");
-	fread(fs.meta, sizeof(fmeta_t), FILE_NUMBER, FILE);
-	fread(fs.block, sizeof(int), BLOCK_NUMBER, FILE);	
+  	FILE *f = fopen(FUSE_SRC_FILE, "r");
+	fread(fs.meta, sizeof(fmeta), FILE_NUMBER, f);
+	fread(fs.block, sizeof(int), BLOCK_NUMBER, f);	
 	int i;
 	for(i = 0; i < BLOCK_NUMBER; i++)
 	fs.block[i] = fs.block[i] == 0 ? -2 : fs.block[i];
@@ -162,7 +162,7 @@ int addFile(char* fileName, int size, bool isDirectory)
 	meta->startBlock = findEmptyBlock();
 	meta->size = size;
 	meta->isDirectory = isDirectory;
-	meta->isNotFree = false;
+	meta->isEmpty = false;
 
 	int first = findEmptyBlock();
 	fs.block[first] = -1;
@@ -247,11 +247,38 @@ int removeFileOrDirectory(const char *path)
 	return res != 0 ? -1 : 0;
 }
 
+char *getPathToDirectory(const char* path) 
+{
+	char *currentDirectory;
+	char *p = strrchr(path, '/');
+
+	if (p != NULL)
+	 {
+		int len = strlen(path) - strlen(p);
+		if (len != 0) 
+		{
+			currentDirectory = (char *)malloc(len + 1);
+			strncpy(currentDirectory, path, len);	
+			currentDirectory[len] = '\0';
+		} 
+		else 
+		{
+			currentDirectory = (char *)malloc(2);
+			strcpy(currentDirectory, "/\0");
+		}
+	} 
+	else 
+	{
+		currentDirectory = (char *)malloc(2);
+		strcpy(currentDirectory, "/\0");
+	}
+	return currentDirectory;
+}
 int remove(const char* path)
  {
 	fileMeta *fileMeta, *dMeta;
 	char *data, *extData;
-	char *dir = getDirPath(path);
+	char *dir = getPathToDirectory(path);
 	printf("Removed: Directory = %s\t Path = %s\n", dir, path);
 
 	int dMetaNum = getMeta(dir, &dMeta);
@@ -328,7 +355,7 @@ int getMeta(const char *path, fileMeta **meta)
 	return k;
 }
 
-int openFile (const char *path,)
+int openFile (const char *path)
 {	
 	fileMeta *meta;
 	int metaIndex = getMeta(path, &meta);
@@ -401,7 +428,7 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 }
 static int fs_create(const char *path, mode_t mode, struct fuse_file_info *finfo) 
 {
-	return createFile(path)
+	return createFile(path);
 }
 static int fs_mkdir(const char *path, mode_t mode)
 {
