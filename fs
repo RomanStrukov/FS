@@ -15,7 +15,7 @@
 
 typedef enum{ false, true} bool;
 
-struct {
+typedef struct fileMeta_struct {
 	char name[FILENAME_MAX_LENGTH]; //name
 	int startBlock;			//number of startBlock block
 	int size;			//size
@@ -26,10 +26,8 @@ struct {
 	// block[i] >= 0   next block's index, 
 	//          == -1  end,
 	//          == -2  empty
-struct{
-	fileMeta meta[FILE_NUMBER];
-
-	
+typedef struct filesystem_struct{
+	fileMeta meta[FILE_NUMBER];	
 	int block[BLOCK_NUMBER];
 } fileSystem;
 
@@ -56,7 +54,7 @@ void initFS()
 
 void restoreFS()
 {
-  FILE *FILE = fopen(FUSE_SRC_FILE, "r");
+  FILE *f = fopen(FUSE_SRC_FILE, "r");
 	fread(fs.meta, sizeof(fmeta_t), FILE_NUMBER, FILE);
 	fread(fs.block, sizeof(int), BLOCK_NUMBER, FILE);	
 	int i;
@@ -72,7 +70,7 @@ fileMeta *getMetaAtIndex(int metaIndex)
 
 int writeBlocks(fileMeta *currentMeta) 
 {
-	FILE *f = fopen(FILE_PATH, "r+");
+	FILE *f = fopen(FUSE_SRC_FILE, "r+");
 	int i = currentMeta->startBlock;
 	do {
 		fseek(f, sizeof(fileMeta) * FILE_NUMBER + sizeof(int) * i, SEEK_SET);
@@ -86,7 +84,7 @@ int writeBlocks(fileMeta *currentMeta)
 
 int writeMeta(int metaIndex) 
 {
-	FILE *f = fopen(FILE_PATH, "r+");
+	FILE *f = fopen(FUSE_SRC_FILE, "r+");
 	fseek(f, metaIndex * sizeof(fileMeta), SEEK_SET);
 
 	fileMeta* currentMeta = getMetaAtIndex(metaIndex);
@@ -101,7 +99,7 @@ int writeData(fileMeta *currentMeta, const char *data, int size, int offset)
 	if (size == 0) 
 		return 0;
 
-	FILE *f = fopen(FILE_PATH, "r+");
+	FILE *f = fopen(FUSE_SRC_FILE, "r+");
 
 	int i = currentMeta->startBlock;
 	int j = offset / BLOCK_SIZE;
@@ -153,7 +151,9 @@ int addFile(char* fileName, int size, bool isDirectory)
 
 	if (findEmptyMeta() == -1) 
 		return -1;
-	meta = getMetaAtIndex(k);
+
+	int numEmpty = findEmptyMeta();
+	meta = getMetaAtIndex(numEmpty);
 	if (findEmptyBlock() == -1) 
 		return -1;
 
@@ -164,12 +164,12 @@ int addFile(char* fileName, int size, bool isDirectory)
 	meta->isDirectory = isDirectory;
 	meta->isNotFree = false;
 
-	int first = findEmptyBlock()
+	int first = findEmptyBlock();
 	fs.block[first] = -1;
-	writeMeta(k);
+	writeMeta(numEmpty);
 	writeBlocks(meta);
 
-	return k;
+	return numEmpty;
 }
 
 int readData(fileMeta *currentMeta, char **data) 
@@ -178,7 +178,7 @@ int readData(fileMeta *currentMeta, char **data)
 	if (currentMeta == NULL) 
 		return -1;
 
-	FILE *f = fopen(FILE_PATH, "r");
+	FILE *f = fopen(FUSE_SRC_FILE, "r");
 	char *buffer = (char *)malloc(currentMeta->size);
 	int i = currentMeta->startBlock;
 	int k = 0;
@@ -430,13 +430,13 @@ static struct fuse_operations fuse_oper =
         .unlink			= fs_unlink,
         .open           = fs_open,
         .read           = fs_read,
-	.mkdir          = fs_mkdir
-	.rmdir			= fs_rmdir,
-	.readdir        = fs_readdir,
-	.init  			= fs_init
+		.mkdir          = fs_mkdir
+		.rmdir			= fs_rmdir,
+		.readdir        = fs_readdir,
+		.init  			= fs_init
 };
 
 int main(int argc, char *argv[])
 {
-	return fuse_main(argc, argv, &fs_oper, NULL);
+	return fuse_main(argc, argv, &fuse_oper, NULL);
 }
