@@ -1,4 +1,4 @@
-#define FUSE_USE_VERSION 30
+#define FUSE_USE_VERSION 26
 
 #include <config.h>
 #include <fuse.h>
