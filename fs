@@ -7,7 +7,7 @@
 #include <fuse.h>
 #include <fcntl.h>
 
-#define FUSE_SRC_FILE "/home/fileSystem/fs/"
+#define FUSE_SRC_FILE "/home/fileSystem/fs"
 #define FILENAME_MAX_LENGTH 100
 #define BLOCK_NUMBER 2048
 #define BLOCK_SIZE 2048
