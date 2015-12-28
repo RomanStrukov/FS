@@ -55,7 +55,7 @@ void initFS()
 void restoreFS()
 {
   	FILE *f = fopen(FUSE_SRC_FILE, "r");
-	fread(fs.meta, sizeof(fmeta), FILE_NUMBER, f);
+	fread(fs.meta, sizeof(fileMeta), FILE_NUMBER, f);
 	fread(fs.block, sizeof(int), BLOCK_NUMBER, f);	
 	int i;
 	for(i = 0; i < BLOCK_NUMBER; i++)
@@ -107,7 +107,7 @@ int writeData(fileMeta *currentMeta, const char *data, int size, int offset)
 		i = fs.block[i];
 	
 	int left = size;
-	int count = 0;
+	int k = 0;
 	int remain = offset % BLOCK_SIZE;
 
 	int skip = sizeof(fileMeta) * FILE_NUMBER + sizeof(int) * BLOCK_NUMBER;
@@ -157,7 +157,7 @@ int addFile(char* fileName, int size, bool isDirectory)
 	if (findEmptyBlock() == -1) 
 		return -1;
 
-	strcpy(meta->fileName, fileName);
+	strcpy(meta->name, fileName);
 
 	meta->startBlock = findEmptyBlock();
 	meta->size = size;
@@ -226,12 +226,14 @@ int createFileOrDirectory(const char* path, bool isDirectory)
 	}
 	printf("Directory: %s fileName: %s\n", directory, fileName);
 	extData = (char*)malloc(readData(meta, &data) + sizeof(int));
-	memcpy(extData, data, size);
 
-	int n = size/sizeof(int)
+	int dataSize = readData(meta, &data);
+	memcpy(extData, data, dataSize);
+
+	int n = dataSize/sizeof(int);
 	((int*)extData)[n] = addFile(fileName, 0, isDirectory);
 
-	int resSize = size + sizeof(int)
+	int resSize = dataSize + sizeof(int);
 	writeData(meta, extData, resSize, 0);
 	meta->size = resSize;	
 	writeMeta(getMeta(directory, &meta));
@@ -382,7 +384,7 @@ int createFile(const char *path)
 	return createFileOrDirectory(path, false) != 0 ? -1 : 0;
 }
 
-int mkdir(const char *path)
+int createDirectory(const char *path)
 {
 	return createFileOrDirectory(path, true) != 0 ? -1 : 0;
 }
@@ -432,7 +434,7 @@ static int fs_create(const char *path, mode_t mode, struct fuse_file_info *finfo
 }
 static int fs_mkdir(const char *path, mode_t mode)
 {
-	return mkdir(path);
+	return createDirectory(path);
 }
 static int fs_rmdir(const char *path)
  {
@@ -443,11 +445,6 @@ static int fs_unlink(const char *path)
 {
 	return removeFileOrDirectory(path);
 }
-static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-			 off_t offset, struct fuse_file_info *fi)
-{
-	
-}
 
 //associating fuse functions with current realisations
 static struct fuse_operations fuse_oper = 
@@ -457,7 +454,7 @@ static struct fuse_operations fuse_oper =
         .unlink			= fs_unlink,
         .open           = fs_open,
         .read           = fs_read,
-		.mkdir          = fs_mkdir
+		.mkdir          = fs_mkdir,
 		.rmdir			= fs_rmdir,
 		.readdir        = fs_readdir,
 		.init  			= fs_init
