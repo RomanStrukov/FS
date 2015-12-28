@@ -94,6 +94,30 @@ int writeMeta(int metaIndex)
 	return 0;
 }
 
+int firstEmptyMeta() 
+{
+	int i = 0;
+	while (i < sizeof(fs.meta) / sizeof(fs.meta[0])) 
+	{
+		if (fs.meta[i].isEmpty) //FOUND!
+			return i;
+		i++;
+	}
+	return -1; 
+}
+
+int firstEmptyBlock() 
+{
+	int i = 0;
+	while (i < BLOCK_NUMBER) 
+	{
+		if (fs.block[i] == -2) //FOUND!
+			return i;
+		i++;
+	}
+	return -1; 
+}
+
 int writeData(fileMeta *currentMeta, const char *data, int size, int offset) 
 {
 	if (size == 0) 
@@ -127,11 +151,11 @@ int writeData(fileMeta *currentMeta, const char *data, int size, int offset)
 			if (fs.block[i] >= 0) i = fs.block[i];
 			else 
 			{
-				if (findEmptyBlock() == -1)
+				if (firstEmptyBlock() == -1)
 				 return -1;
-				fs.block[i] = findEmptyBlock();
-				fs.block[findEmptyBlock()] = -1;
-				i = findEmptyBlock();
+				fs.block[i] = firstEmptyBlock();
+				fs.block[firstEmptyBlock()] = -1;
+				i = firstEmptyBlock();
 			}
 		}
 
@@ -149,22 +173,22 @@ int addFile(char* fileName, int size, bool isDirectory)
 {
 	fileMeta *meta = NULL;
 
-	if (findEmptyMeta() == -1) 
+	if (firstEmptyMeta() == -1) 
 		return -1;
 
-	int numEmpty = findEmptyMeta();
+	int numEmpty = firstEmptyMeta();
 	meta = getMetaAtIndex(numEmpty);
-	if (findEmptyBlock() == -1) 
+	if (firstEmptyBlock() == -1) 
 		return -1;
 
 	strcpy(meta->name, fileName);
 
-	meta->startBlock = findEmptyBlock();
+	meta->startBlock = firstEmptyBlock();
 	meta->size = size;
 	meta->isDirectory = isDirectory;
 	meta->isEmpty = false;
 
-	int first = findEmptyBlock();
+	int first = firstEmptyBlock();
 	fs.block[first] = -1;
 	writeMeta(numEmpty);
 	writeBlocks(meta);
@@ -276,6 +300,7 @@ char *getPathToDirectory(const char* path)
 	}
 	return currentDirectory;
 }
+
 int remove(const char* path)
  {
 	fileMeta *fileMeta, *dMeta;
@@ -303,6 +328,15 @@ int remove(const char* path)
 	free(data);
 	free(dir);
 	return 0;
+}
+int getFileMetaIndex(char *data, char *fileName, int size) {
+	int i = 0;
+	while (i < size / sizeof(int)) {
+		if (strcmp(fs.meta[((int *)data)[i]].name, fileName) == 0)
+			return ((int *)data)[i];
+		i++;	
+	}
+	return -1;
 }
 
 int getMeta(const char *path, fileMeta **meta) 
@@ -346,7 +380,7 @@ int getMeta(const char *path, fileMeta **meta)
 			strncpy(name, s, fpath + strlen(fpath) - s);
 			p = fpath + strlen(fpath);		
 		}
-		k = getFileMetaNumber(data, name, size);
+		k = getFileMetaIndex(data, name, size);
 		if (k == -1) return -1;
 		m = getMetaAtIndex(k);
 		memset(name, '\0', FILENAME_MAX_LENGTH);
@@ -362,6 +396,53 @@ int openFile (const char *path)
 	fileMeta *meta;
 	int metaIndex = getMeta(path, &meta);
 	return metaIndex == -1 ? -1 : 0;
+}
+
+int readFile(fileMeta *currentMeta, char **buf, int size, int offset) 
+{
+
+	if (size == 0) 
+		return 0;
+	int s = currentMeta->size;
+	if (offset > s) 
+		return 0;
+	if (size < s) 
+		s = size;
+
+	FILE *f = fopen(FUSE_SRC_FILE, "r");
+	int i = currentMeta->startBlock;
+	int j = offset / BLOCK_SIZE;
+	while (j-- > 0) 
+		i = fs.block[i];
+	
+	int left = s;
+	int k = 0;
+	int remain = offset % BLOCK_SIZE;
+	char *tempData = (char *)malloc(s);
+	int skip = sizeof(fileMeta) * FILE_NUMBER + sizeof(int) * BLOCK_NUMBER; 
+
+	while (left > 0) 
+	{ 	
+		if (remain + left > BLOCK_SIZE)
+			k = BLOCK_SIZE - remain;
+		else
+			k = left;
+
+		fseek(f, skip + i * BLOCK_SIZE + remain, SEEK_SET);
+		fread(tempData + s - left, 1, k, f);
+
+		if (remain + k == BLOCK_SIZE) 
+		{
+			i = fs.block[i];
+		}
+
+		left = left - k;
+		remain = 0;
+	}
+
+	fclose(f);
+	*buf = (char *)tempData;
+	return s;	
 }
 
 int read (const char *path, char *buf, size_t size, off_t offset)
@@ -389,11 +470,8 @@ int createDirectory(const char *path)
 	return createFileOrDirectory(path, true) != 0 ? -1 : 0;
 }
 
-int readdir (Meta *meta, char * data)
-{
 
-}
-
+//               ---FUSE---
 static void *fs_init(struct fuse_conn_info *fi) 
 {
 	restoreFS();	
@@ -455,8 +533,7 @@ static struct fuse_operations fuse_oper =
         .open           = fs_open,
         .read           = fs_read,
 		.mkdir          = fs_mkdir,
-		.rmdir			= fs_rmdir,
-		.readdir        = fs_readdir,
+		.rmdir			= fs_rmdir,		
 		.init  			= fs_init
 };
 
