@@ -118,7 +118,7 @@ int firstEmptyBlock()
 	return -1; 
 }
 
-int writeData(fileMeta *currentMeta, const char *data, int size, int offset) 
+int saveData(fileMeta *currentMeta, const char *data, int size, int offset) 
 {
 	if (size == 0) 
 		return 0;
@@ -196,7 +196,7 @@ int addFile(char* fileName, int size, bool isDirectory)
 	return numEmpty;
 }
 
-int readData(fileMeta *currentMeta, char **data) 
+int getData(fileMeta *currentMeta, char **data) 
 {
 
 	if (currentMeta == NULL) 
@@ -249,22 +249,66 @@ int createFileOrDirectory(const char* path, bool isDirectory)
 		directory[strlen(path) - strlen(fileName)] = '\0';
 	}
 	printf("Directory: %s fileName: %s\n", directory, fileName);
-	extData = (char*)malloc(readData(meta, &data) + sizeof(int));
+	extData = (char*)malloc(getData(meta, &data) + sizeof(int));
 
-	int dataSize = readData(meta, &data);
+	int dataSize = getData(meta, &data);
 	memcpy(extData, data, dataSize);
 
 	int n = dataSize/sizeof(int);
 	((int*)extData)[n] = addFile(fileName, 0, isDirectory);
 
 	int resSize = dataSize + sizeof(int);
-	writeData(meta, extData, resSize, 0);
+	saveData(meta, extData, resSize, 0);
 	meta->size = resSize;	
 	writeMeta(getMeta(directory, &meta));
 
 	free(extData);
 	free(directory);
 	return 0;
+}
+
+int createEmptyFS() 
+{
+	FILE *f = fopen(FUSE_SRC_FILE, "w+");
+	
+	char *bufMeta = (char *)malloc(sizeof(fileMeta)); //meta
+	memset(bufMeta, '\0', sizeof(fileMeta));
+	
+	int i = 0;
+	while (i < FILE_NUMBER) 
+	{
+		fwrite(bufMeta, sizeof(fileMeta), 1, f);
+		i++;
+	}	
+	
+
+	char *bufBlockInf = (char *)malloc(sizeof(int)); //blockInf
+	memset(bufBlockInf, '\0', sizeof(int));
+	
+	i = 0;
+	while (i < BLOCK_NUMBER) 
+	{
+		fwrite(bufBlockInf, sizeof(int), 1, f);
+		i++;
+	}
+	
+	char *bufBlockData = (char *)malloc(BLOCK_SIZE); //blockData
+	memset(bufBlockData, '\0', BLOCK_SIZE);
+	
+	i = 0;
+	while (i < BLOCK_NUMBER) 
+	{
+		fwrite(bufBlockData, BLOCK_SIZE, 1, f);
+		i++;
+	}
+	
+	fclose(f);
+
+	initFS();
+	addFile("/", 0, true);
+	free(bufMeta);
+	free(bufBlockInf);
+	free(bufBlockData);
 }
 
 int removeFileOrDirectory(const char *path)
@@ -310,7 +354,7 @@ int remove(const char* path)
 
 	int dMetaNum = getMeta(dir, &dMeta);
 	int fMetaNum = getMeta(path, &fileMeta);
-	int size = readData(dMeta, &data);
+	int size = getData(dMeta, &data);
 	extData = (char *)malloc(size - sizeof(int));
 
 	int i = 0, j = 0;
@@ -321,7 +365,7 @@ int remove(const char* path)
 		i++; 
 	}
 
-	writeData(dMeta, extData, size, 0);
+	saveData(dMeta, extData, size, 0);
 	dMeta->size = size - sizeof(int);
 	writeMeta(dMetaNum);
 
@@ -369,7 +413,7 @@ int getMeta(const char *path, fileMeta **meta)
 	while (p - fpath < strlen(fpath)) {
 		if (m->size == 0)
 			return -1;
-		size = readData(m, &data);
+		size = getData(m, &data);
 		s = p;
 		p = strchr(p, '/');
 		if (p != NULL) {
@@ -474,7 +518,12 @@ int createDirectory(const char *path)
 //               ---FUSE---
 static void *fs_init(struct fuse_conn_info *fi) 
 {
-	restoreFS();	
+	initFS();
+		
+}
+static void *fs_start(struct fuse_conn_info *fi)
+{
+	restoreFS();
 }
 static int fs_getattr(const char* path, struct stat *stbuf) 
 {
@@ -534,10 +583,13 @@ static struct fuse_operations fuse_oper =
         .read           = fs_read,
 		.mkdir          = fs_mkdir,
 		.rmdir			= fs_rmdir,		
-		.init  			= fs_init
+		.init  			= fs_init		
 };
 
 int main(int argc, char *argv[])
 {
-	return fuse_main(argc, argv, &fuse_oper, NULL);
+	if (argc > 1 && strcmp(argv[1], "-n") == 0)
+		createEmptyFS();
+	else
+		return fuse_main(argc, argv, &fuse_oper, NULL);
 }
