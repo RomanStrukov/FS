@@ -7,7 +7,7 @@
 #include <fuse.h>
 #include <fcntl.h>
 
-#define FUSE_SRC_FILE "/home/fileSystem/fs/fss"
+#define FUSE_SRC_FILE "/home/roman/fileSystem/fs/myFs"
 #define FILENAME_MAX_LENGTH 100
 #define BLOCK_NUMBER 2048
 #define BLOCK_SIZE 2048
@@ -601,7 +601,7 @@ static struct fuse_operations fuse_oper =
 
 int main(int argc, char *argv[])
 {
-	printf("Start Fuse...\n");
+	printf("Starting...\n");
 	if (argc > 1 && strcmp(argv[1], "new") == 0)
 		makeEmptyFS();
 	else		
