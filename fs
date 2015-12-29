@@ -7,7 +7,7 @@
 #include <fuse.h>
 #include <fcntl.h>
 
-#define FUSE_SRC_FILE "/home/fileSystem/fs/fsDir/fsFile"
+#define FUSE_SRC_FILE "/home/fileSystem/fs/fss"
 #define FILENAME_MAX_LENGTH 100
 #define BLOCK_NUMBER 2048
 #define BLOCK_SIZE 2048
@@ -16,11 +16,11 @@
 typedef enum{ false, true} bool;
 
 typedef struct fileMeta_struct {
-	char name[FILENAME_MAX_LENGTH]; //name
-	int startBlock;			//number of startBlock block
-	int size;			//size
-	bool isDirectory;			//is directory (or file)
-	bool isEmpty;			//is free
+	char name[FILENAME_MAX_LENGTH]; 
+	int startBlock;			
+	int size;			
+	bool isDirectory;			
+	bool isEmpty;			
 } fileMeta;
 
 	// block[i] >= 0   next block's index, 
@@ -267,7 +267,7 @@ int createFileOrDirectory(const char* path, bool isDirectory)
 	return 0;
 }
 
-int createEmptyFS() 
+int makeEmptyFS() 
 {
 	FILE *f = fopen(FUSE_SRC_FILE, "w+");
 	
@@ -518,13 +518,9 @@ int createDirectory(const char *path)
 //               ---FUSE---
 static void *fs_init(struct fuse_conn_info *fi) 
 {
-	initFS();
-		
-}
-static void *fs_start(struct fuse_conn_info *fi)
-{
 	restoreFS();
 }
+
 static int fs_getattr(const char* path, struct stat *stbuf) 
 {
 	int res = 0;
@@ -555,6 +551,22 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 {
 	return read(path, buf, size, offset);
 }
+static int fs_write(const char *path, const char *buf, size_t nbytes, 
+			off_t offset, struct fuse_file_info *fi) 
+{
+	fileMeta *currentMeta;
+
+	int metaIndex = getMeta(path, &currentMeta);
+
+	if (metaIndex == -1) 
+		return -ENOENT;
+	if (saveData(currentMeta, buf, nbytes, offset) != -1) 
+	{
+		writeMeta(metaIndex);
+		return saveData(currentMeta, buf, nbytes, offset);
+	}
+	return -1;
+}
 static int fs_create(const char *path, mode_t mode, struct fuse_file_info *finfo) 
 {
 	return createFile(path);
@@ -581,6 +593,7 @@ static struct fuse_operations fuse_oper =
         .unlink			= fs_unlink,
         .open           = fs_open,
         .read           = fs_read,
+        .write          = fs_write,
 		.mkdir          = fs_mkdir,
 		.rmdir			= fs_rmdir,		
 		.init  			= fs_init		
@@ -588,8 +601,9 @@ static struct fuse_operations fuse_oper =
 
 int main(int argc, char *argv[])
 {
-	if (argc > 1 && strcmp(argv[1], "-n") == 0)
-		createEmptyFS();
-	else
-		return fuse_main(argc, argv, &fuse_oper, NULL);
+	printf("Start Fuse...\n");
+	if (argc > 1 && strcmp(argv[1], "new") == 0)
+		makeEmptyFS();
+	else		
+	return fuse_main(argc, argv, &fuse_oper, NULL);
 }
